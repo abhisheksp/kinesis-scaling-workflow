@@ -51,3 +51,10 @@ aws stepfunctions start-execution \
 --state-machine-arn arn:aws:states:us-east-1:123456789:stateMachine:KinesisScalingWorkflow \
 --input "{\"stream_name\": \"test-stream\", \"desired_shard_count\": 1}"
 ```
+
+## Removal
+```commandline
+cd cdk
+cdk destroy
+```
+Manually remove any retained Lambda CloudWatch Log Groups
