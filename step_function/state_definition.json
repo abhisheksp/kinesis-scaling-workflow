@@ -1,0 +1,88 @@
+{
+    "StartAt": "DescribeStreamSummary",
+    "States": {
+      "DescribeStreamSummary": {
+        "Type": "Task",
+        "Parameters": {
+          "StreamName.$": "$.stream_name"
+        },
+        "Resource": "arn:aws:states:::aws-sdk:kinesis:describeStreamSummary",
+        "Next": "CalculateTargetShardCount",
+        "ResultPath": "$.describe_stream_output"
+      },
+      "CalculateTargetShardCount": {
+        "Type": "Task",
+        "Resource": "arn:aws:states:::lambda:invoke",
+        "OutputPath": "$.Payload",
+        "Parameters": {
+          "Payload.$": "$",
+          "FunctionName": "${FUNCTION_ARN}"
+        },
+        "Retry": [
+          {
+            "ErrorEquals": [
+              "Lambda.ServiceException",
+              "Lambda.AWSLambdaException",
+              "Lambda.SdkClientException"
+            ],
+            "IntervalSeconds": 2,
+            "MaxAttempts": 6,
+            "BackoffRate": 2
+          }
+        ],
+        "Next": "UpdateShardCount"
+      },
+      "UpdateShardCount": {
+        "Type": "Task",
+        "Parameters": {
+          "ScalingType": "UNIFORM_SCALING",
+          "StreamName.$": "$.stream_name",
+          "TargetShardCount.$": "$.target_shard_count"
+        },
+        "Resource": "arn:aws:states:::aws-sdk:kinesis:updateShardCount",
+        "ResultPath": null,
+        "Next": "DoesStreamhaveDesiredShardNumber"
+      },
+      "DoesStreamhaveDesiredShardNumber": {
+        "Type": "Choice",
+        "Choices": [
+          {
+            "Variable": "$.target_shard_count",
+            "NumericEqualsPath": "$.desired_shard_count",
+            "Next": "Success"
+          }
+        ],
+        "Default": "DescribeStreamSummary2"
+      },
+      "DescribeStreamSummary2": {
+        "Type": "Task",
+        "Parameters": {
+          "StreamName.$": "$.stream_name"
+        },
+        "Resource": "arn:aws:states:::aws-sdk:kinesis:describeStreamSummary",
+        "ResultPath": "$.describe_stream_output",
+        "Next": "IsStreamActive"
+      },
+      "IsStreamActive": {
+        "Type": "Choice",
+        "Choices": [
+          {
+            "Variable": "$.describe_stream_output.StreamDescriptionSummary.StreamStatus",
+            "StringEquals": "ACTIVE",
+            "Next": "CalculateTargetShardCount"
+          }
+        ],
+        "Default": "Wait"
+      },
+      "Wait": {
+        "Type": "Wait",
+        "Seconds": 30,
+        "Next": "DescribeStreamSummary2"
+      },
+      "Success": {
+        "Type": "Succeed"
+      }
+    },
+    "TimeoutSeconds": 900,
+    "Comment": "Workflow to Scale up/Scale Down to the desired number of Kinesis Data Stream Shards"
+  }
